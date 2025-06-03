@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dim">
+<html lang="en" data-theme="dracula">
 
 <head>
     <meta charset="UTF-8">
@@ -63,7 +63,7 @@
         <nav>
             <h6 class="footer-title">Contacto</h6>
             <div class="grid grid-flow-col gap-4">
-                <a href="https://github.com/jakeipe" target="_blank">
+                <a href="https://github.com/katya-15" target="_blank">
                     <i class="fa-brands fa-square-github fa-3x"></i>
                 </a>
             </div>

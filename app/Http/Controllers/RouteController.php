@@ -9,38 +9,46 @@ use App\Services\RouteCalculator;
 
 class RouteController extends Controller
 {
+    /**
+     * Muestra todas las rutas activas junto a las ciudades activas
+     */
     public function index()
     {
         $rutas = Route::with(['origenCity', 'destinoCity'])
             ->where('status_id', 1)
             ->get();
+
         $ciudades = City::with('status')->active()->get();
 
         return view('rutas.index_ruta', compact('rutas', 'ciudades'));
     }
 
+    /**
+     * Almacena una nueva ruta en la base de datos
+     * Valida que no exista ya una ruta entre esas ciudades (ida o vuelta)
+     */
     public function store(Request $request)
     {
-        $validated = $request->validate([
+        $request->validate([
             'ciudad_origen_id' => 'required|exists:cities,id',
             'ciudad_destino_id' => 'required|exists:cities,id|different:ciudad_origen_id',
-            'distancia' => 'required|integer|min:1',
-            'activo' => 'sometimes'
+            'distancia' => 'required|numeric|min:1',
         ]);
 
-        // Verificar ruta existente
+        // Verifica si ya existe una ruta directa o inversa
         $rutaExistente = Route::where(function ($q) use ($request) {
             $q->where('ciudad_origen_id', $request->ciudad_origen_id)
-                ->where('ciudad_destino_id', $request->ciudad_destino_id);
+              ->where('ciudad_destino_id', $request->ciudad_destino_id);
         })->orWhere(function ($q) use ($request) {
             $q->where('ciudad_origen_id', $request->ciudad_destino_id)
-                ->where('ciudad_destino_id', $request->ciudad_origen_id);
+              ->where('ciudad_destino_id', $request->ciudad_origen_id);
         })->exists();
 
         if ($rutaExistente) {
             return back()->with('error', 'Ya existe una ruta entre estas ciudades');
         }
 
+        // Crea la nueva ruta
         Route::create([
             'ciudad_origen_id' => $request->ciudad_origen_id,
             'ciudad_destino_id' => $request->ciudad_destino_id,
@@ -53,6 +61,9 @@ class RouteController extends Controller
             ->with('success', 'Ruta creada exitosamente');
     }
 
+    /**
+     * Activa o desactiva el estado de una ruta
+     */
     public function updateStatus(Route $ruta)
     {
         $ruta->update(['activo' => !$ruta->activo]);
@@ -61,6 +72,9 @@ class RouteController extends Controller
             ->with('success', 'Estado de ruta actualizado');
     }
 
+    /**
+     * Encuentra y muestra la mejor ruta entre dos ciudades activas
+     */
     public function encontrarRuta(Request $request)
     {
         $request->validate([
@@ -68,26 +82,21 @@ class RouteController extends Controller
             'destino' => 'required|exists:cities,id|different:origen',
         ]);
 
-        // Verificar que las ciudades de origen y destino estén ACTIVAS (status_id = 1)
+        // Verifica que ambas ciudades estén activas
         $ciudadOrigen = City::active()->findOrFail($request->origen);
         $ciudadDestino = City::active()->findOrFail($request->destino);
 
-        // Obtener solo ciudades activas para evitar mostrar nombres de ciudades inactivas
-        $ciudades = City::active()->get()->keyBy('id');
+        $ciudades = City::active()->get()->keyBy('id'); // Para acceso rápido por ID
 
-        // Instanciar el calculador de rutas (asumiendo que internamente filtra rutas activas)
+        // Calcula rutas óptimas usando el servicio personalizado
         $calculador = new RouteCalculator();
         $resultado = $calculador->calcularRutasOptimas($request->origen, $request->destino);
 
-        // Procesar los caminos para incluir nombres de ciudades (solo activas)
-        $procesarRuta = function ($ruta) use ($ciudades) {
-            return [
-                'distancia' => $ruta['distancia'],
-                'path' => array_map(function ($ciudadId) use ($ciudades) {
-                    return $ciudades[$ciudadId]->nombre; // Solo ciudades activas
-                }, $ruta['path'])
-            ];
-        };
+        // Procesa las rutas para mostrar nombres de ciudades
+        $procesarRuta = fn($ruta) => [
+            'distancia' => $ruta['distancia'],
+            'path' => array_map(fn($id) => $ciudades[$id]->nombre, $ruta['path'])
+        ];
 
         $rutaCorta = $procesarRuta($resultado['mas_corta']);
         $rutasAlternativas = array_map($procesarRuta, $resultado['alternativas']);
@@ -97,43 +106,48 @@ class RouteController extends Controller
             'destino' => $ciudadDestino->nombre,
             'rutaCorta' => $rutaCorta,
             'rutasAlternativas' => $rutasAlternativas,
-            'ciudades' => $ciudades // Solo ciudades activas para dropdowns/filtros
+            'ciudades' => $ciudades
         ]);
     }
 
-
+    /**
+     * Desactiva una ruta usando un método en el modelo
+     */
     public function desactivate(Route $ruta)
     {
         if ($ruta->desactivate()) {
             return redirect()->route('rutas.index')
-                ->with('success', 'Ciudad desactivada correctamente');
+                ->with('success', 'Ruta desactivada correctamente');
         }
 
         return redirect()->route('rutas.index')
-            ->with('error', 'No se pudo desactivar la ciudad');
+            ->with('error', 'No se pudo desactivar la ruta');
     }
 
+    /**
+     * Actualiza los datos de una ruta
+     * También valida que la nueva combinación origen-destino no exista ya
+     */
     public function update(Request $request, Route $ruta)
     {
-        $validated = $request->validate([
+        $request->validate([
             'ciudad_origen_id' => 'required|exists:cities,id',
             'ciudad_destino_id' => 'required|exists:cities,id|different:ciudad_origen_id',
-            'distancia' => 'required|integer|min:1',
+            'distancia' => 'required|numeric|min:1',
         ]);
 
-        // Verificar si se están modificando las ciudades
         $origenCambiado = $ruta->ciudad_origen_id != $request->ciudad_origen_id;
         $destinoCambiado = $ruta->ciudad_destino_id != $request->ciudad_destino_id;
 
-        // Solo verificar rutas existentes si se modificaron las ciudades
+        // Solo se verifica duplicidad si se cambiaron las ciudades
         if ($origenCambiado || $destinoCambiado) {
-            $rutaExistente = Route::where('id', '!=', $ruta->id) // Excluir la ruta actual
+            $rutaExistente = Route::where('id', '!=', $ruta->id)
                 ->where(function ($q) use ($request) {
                     $q->where('ciudad_origen_id', $request->ciudad_origen_id)
-                        ->where('ciudad_destino_id', $request->ciudad_destino_id);
+                      ->where('ciudad_destino_id', $request->ciudad_destino_id);
                 })->orWhere(function ($q) use ($request) {
                     $q->where('ciudad_origen_id', $request->ciudad_destino_id)
-                        ->where('ciudad_destino_id', $request->ciudad_origen_id);
+                      ->where('ciudad_destino_id', $request->ciudad_origen_id);
                 })->exists();
 
             if ($rutaExistente) {
@@ -141,6 +155,7 @@ class RouteController extends Controller
             }
         }
 
+        // Actualiza la ruta
         $ruta->update([
             'ciudad_origen_id' => $request->ciudad_origen_id,
             'ciudad_destino_id' => $request->ciudad_destino_id,
