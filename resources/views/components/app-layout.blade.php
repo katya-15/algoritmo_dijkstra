@@ -31,11 +31,12 @@
                         class="menu menu-sm dropdown-content bg-base-100 rounded-box z-1 mt-3 w-52 p-2 shadow">
                         <li><a href="{{ route('ciudades.index') }}"><i class="fas fa-city mr-2"></i> Ciudades</a></li>
                         <li><a href="{{ route('rutas.index') }}"><i class="fas fa-route mr-2"></i> Rutas</a></li>
+                        <li><a href="{{ route('homclass.index') }}"><i class="fa-solid fa-landmark"></i> Clases</a></li>
                     </ul>
                 </div>
             </div>
             <div class="navbar-center">
-                <a class="btn btn-ghost text-xl" href="{{ route('admin.dashboard') }}">Rutas Tezulutlán</a>
+                <a class="btn btn-ghost text-xl" href="{{ route('admin.dashboard') }}">Jagan</a>
             </div>
             <div class="navbar-end">
             </div>
@@ -55,7 +56,7 @@
         <aside>
             <i class="fa-solid fa-route fa-4x"></i>
             <p>
-                Rutas Tezulutlán
+                Jagan
                 <br />
                 Ofrecioendo rutas optimas desde 2010
             </p>
